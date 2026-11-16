@@ -1,0 +1,7 @@
+{
+  "name": "vocalert-ppg-research-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Zero-dependency browser prototype; package.json only enables native JavaScript ES modules in Node tooling."
+}

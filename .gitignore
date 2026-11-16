@@ -1,0 +1,9 @@
+.DS_Store
+Thumbs.db
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+exports/
+*.local.csv
+*.local.json

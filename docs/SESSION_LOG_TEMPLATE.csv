@@ -1,0 +1,2 @@
+study_code,participant_code_pseudonymous,session_code,recording_timestamp_local,phone_manufacturer_model,android_version,browser_version,torch_confirmed,video_width,video_height,observed_sampling_hz,hand,finger,posture,rest_minutes_before,hand_temperature_category,activity_in_previous_30min,recording_quality,reference_device_type,reference_pulse_rate_bpm,reference_timestamp,notes_no_identifiers
+VOCALERT_PILOT,P001,S001,,,,,,,,,,,,,,,,,,,

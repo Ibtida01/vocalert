@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101d2b">
+  <meta name="description" content="VOCALERT — local-first smartphone fingertip PPG research prototype.">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>VOCALERT — PPG Research Prototype</title>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="#overview" id="brand-home">
+      <div class="brand-mark"><span>V</span><i></i></div>
+      <div><div class="brand-name">VOCALERT</div><div class="brand-subtitle">SMARTPHONE PPG RESEARCH</div></div>
+    </a>
+    <div class="topbar-right"><span class="local-pill"><span class="live-dot"></span>LOCAL-FIRST</span><span class="version">v0.1 prototype</span></div>
+  </header>
+
+  <main class="main-content">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="eyebrow-line"></span>PHYSIOLOGICAL SIGNAL RESEARCH</div>
+        <h1>Listen to the pulse.<br><em>Study the pattern.</em></h1>
+        <p>Capture fingertip photoplethysmography with a smartphone camera and flash. Explore pulse-wave features against a personal baseline—without pretending a short recording can diagnose disease.</p>
+        <div class="hero-tags"><span><b>01</b> Capture</span><span><b>02</b> Quality check</span><span><b>03</b> Analyze</span></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="orb orb-one"></div><div class="orb orb-two"></div>
+        <div class="pulse-card"><div class="pulse-card-top"><span>LIVE PPG SIGNAL</span><span class="signal-chip">● RESEARCH</span></div>
+          <svg viewBox="0 0 380 132" class="hero-wave"><path d="M0 68 H28 L39 62 L49 75 L63 18 L77 111 L88 66 H112 L124 62 L135 75 L148 18 L162 111 L174 66 H198 L210 62 L221 75 L234 18 L248 111 L260 66 H284 L296 62 L307 75 L320 18 L334 111 L346 66 H380"/></svg>
+          <div class="pulse-card-bottom"><span>FINGERTIP OPTICAL SIGNAL</span><span>0.5—4 Hz</span></div>
+        </div>
+        <div class="hero-caption">NON-INVASIVE · CAMERA-BASED · EXPERIMENTAL</div>
+      </div>
+    </section>
+
+    <nav class="tabs" aria-label="Main navigation">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="measure">Measure PPG</button>
+      <button class="tab" data-tab="baseline">Baseline</button>
+      <button class="tab" data-tab="research">Research notes</button>
+    </nav>
+
+    <div class="notice" id="notice" role="status" hidden><span>ⓘ</span><p id="notice-text"></p><button id="notice-close" aria-label="Dismiss notice">×</button></div>
+
+    <section id="overview-view" class="view">
+      <div class="overview-grid">
+        <div class="overview-main"><div class="micro-label">THE RESEARCH QUESTION</div>
+          <h2>Can short, repeatable fingertip PPG recordings capture useful changes in an individual's peripheral pulse waveform?</h2>
+          <p>VOCALERT is a measurement and data-collection prototype. It starts with signal acquisition, technical quality, and repeatability. The future sickle-cell research hypothesis requires a separate, ethically approved longitudinal study.</p>
+          <div class="overview-actions"><button class="button primary" data-goto="measure">Start a recording <span>→</span></button><button class="button ghost" id="overview-demo">Explore demo waveform</button></div>
+        </div>
+        <div class="overview-stats">
+          <div class="stat-box"><span>Saved baseline sessions</span><strong id="overview-baseline-count">0</strong><small>Stored on this device</small></div>
+          <div class="stat-box"><span>Saved summaries</span><strong id="overview-history-count">0</strong><small>Stored on this device</small></div>
+          <div class="stat-note"><span class="stat-note-icon">⌁</span><p>No account. No cloud upload. Raw frames are processed in-browser and discarded unless you explicitly export signal data.</p></div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature"><span>01</span><h3>Capture</h3><p>Camera + flash fingertip video, sampled frame-by-frame.</p></div>
+        <div class="feature"><span>02</span><h3>Quality gate</h3><p>Check duration, frame timing, clipping, and pulse consistency.</p></div>
+        <div class="feature"><span>03</span><h3>Explore</h3><p>View filtered waveform and experimental pulse features.</p></div>
+      </div>
+      <div class="callout-row"><div class="callout-icon">!</div><div><strong>Research boundary</strong><p>The 2026 sickle-cell PPG study supports feasibility of monitoring vasoreactivity with wearable PPG; it does not validate 30-second smartphone readings as a predictor of an imminent vaso-occlusive crisis. VOCALERT does not calculate a crisis probability.</p></div></div>
+    </section>
+
+    <section id="measure-view" class="view" hidden>
+      <div class="measure-layout">
+        <div class="measure-main">
+          <div class="section-title"><div class="section-number">01</div><div><h2>Fingertip recording</h2><p>Use the rear camera and flash. A complete capture takes about 35 seconds, including warm-up.</p></div></div>
+          <div class="camera-card">
+            <label class="acknowledge"><input type="checkbox" id="medical-ack"> <span>I understand this is an experimental research tool, not a medical test or crisis warning system.</span></label>
+            <div class="camera-stage">
+              <video id="camera-video" class="camera-video" autoplay playsinline muted></video>
+              <div class="camera-placeholder" id="camera-placeholder"><div class="camera-icon">◎</div><strong>Camera preview</strong><span>Enable the rear camera to begin.</span></div>
+              <div class="camera-corner corner-tl"></div><div class="camera-corner corner-tr"></div><div class="camera-corner corner-bl"></div><div class="camera-corner corner-br"></div>
+              <div class="camera-instruction" id="camera-instruction" hidden>Cover the lens + flash with fingertip</div>
+            </div>
+            <canvas id="capture-canvas" class="hidden-canvas"></canvas>
+            <div class="camera-controls">
+              <button class="button primary" id="enable-camera" disabled>Enable camera</button>
+              <button class="button secondary" id="torch-toggle" hidden>Try flash</button>
+              <button class="button secondary" id="stop-camera" hidden>Turn camera off</button>
+              <div class="status-label" id="camera-status"><span class="status-dot"></span>Camera not active</div>
+            </div>
+            <p class="camera-message" id="camera-message">Camera is off. Enable it when you are ready to record.</p>
+          </div>
+          <div class="capture-card">
+            <div class="capture-head"><div><div class="micro-label">RECORDING PROTOCOL</div><h3 id="capture-title">Ready when you are</h3></div><div class="duration-badge">5 sec + 30 sec</div></div>
+            <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+            <div class="progress-caption"><span id="progress-caption">No active recording</span><span id="frame-count">0 frames</span></div>
+            <div class="capture-actions"><button class="button primary" id="start-capture" disabled>Start 35-second capture</button><button class="button ghost" id="simulate">Try simulated signal</button></div>
+            <p class="fine-print">The simulation is only for testing the app. It cannot be used as health data or as evidence of model performance.</p>
+          </div>
+          <div class="howto-grid">
+            <div class="instruction"><span>1</span><div><strong>Warm your hands</strong><p>If your hands are cold, wait until they are comfortably warm. Do not use extreme heat.</p></div></div>
+            <div class="instruction"><span>2</span><div><strong>Cover both parts</strong><p>Place the soft pad of your index finger over the rear camera lens and adjacent flash.</p></div></div>
+            <div class="instruction"><span>3</span><div><strong>Use light pressure</strong><p>Keep contact steady without squeezing. Excess pressure can alter local blood flow.</p></div></div>
+            <div class="instruction"><span>4</span><div><strong>Stay still</strong><p>Sit quietly, support your hand, and avoid talking or moving during the capture.</p></div></div>
+          </div>
+        </div>
+        <aside class="measure-aside">
+          <div class="aside-card"><div class="micro-label">BEFORE YOU START</div><h3>Capture checklist</h3>
+            <ul class="check-list"><li>Phone is on a stable surface</li><li>Camera lens and flash are clean</li><li>Finger pad covers lens and flash</li><li>Pressure is light and steady</li><li>Hand is comfortably warm</li><li>No talking or movement</li></ul>
+            <div class="aside-rule"></div><div class="micro-label">CAMERA COMPATIBILITY</div><p>Best tested target: recent Android phone + Chrome over HTTPS. Torch control is browser/device-dependent.</p>
+          </div>
+          <div class="safety-card"><div class="safety-symbol">!</div><div><strong>Not a medical test</strong><p>This prototype cannot detect sickle-cell disease, diagnose a circulation problem, or predict a pain crisis. Do not delay medical care because of an app result.</p></div></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="baseline-view" class="view content-section" hidden>
+      <div class="section-title"><div class="section-number">03</div><div><h2>Personal resting reference</h2><p>Build a descriptive reference from repeated, comparable resting sessions. It is not a medical normal range.</p></div></div>
+      <div class="baseline-grid">
+        <div class="baseline-summary-card"><div class="micro-label">CURRENT LOCAL REFERENCE</div><h3 id="baseline-title">No reference yet</h3><p>Collect readings at rest, in similar conditions, on several different days. Avoid mixing exercise, illness, cold hands, or different devices into one baseline.</p>
+          <div class="baseline-numbers"><div><span>Mean pulse estimate</span><strong id="baseline-bpm">—</strong></div><div><span>Mean relative pulse amplitude</span><strong id="baseline-amplitude">—</strong></div><div><span>Mean amplitude CV</span><strong id="baseline-cv">—</strong></div></div>
+          <div class="baseline-hint">A reference based on one or two captures is fragile. Aim for at least 5–10 good-quality resting sessions across multiple days for exploratory personal comparison.</div>
+        </div>
+        <div class="baseline-history-card"><div class="card-heading"><div><div class="micro-label">REFERENCE SESSIONS</div><h3>Saved baseline entries</h3></div><span class="mini-chip" id="baseline-count">0</span></div><div class="history-list" id="baseline-list"></div></div>
+      </div>
+      <div class="baseline-history-card saved-history"><div class="card-heading"><div><div class="micro-label">LOCAL MEASUREMENT HISTORY</div><h3>Saved summaries</h3></div><span class="mini-chip" id="history-count">0</span></div><div class="history-list" id="history-list"></div></div>
+      <div class="result-actions"><button class="button secondary" id="export-bundle">Export research bundle (JSON)</button><button class="button danger-ghost" id="clear-data">Delete local data</button></div>
+    </section>
+
+    <section id="research-view" class="view content-section research-content" hidden>
+      <div class="section-title"><div class="section-number">04</div><div><h2>Research notes & protocol</h2><p>The engineering prototype is only the first stage. The clinical hypothesis needs its own evidence.</p></div></div>
+      <div class="research-banner"><div class="research-banner-symbol">∿</div><div><div class="micro-label">SCIENTIFIC HYPOTHESIS — NOT AN ESTABLISHED CLINICAL CLAIM</div><h2>Do personalized peripheral PPG changes contain information about subsequent pain events in people with sickle-cell disease?</h2><p>A small 2026 feasibility study explored overnight PPG vasoreactivity markers in 12 people with SCD and 6 controls. This app does not reproduce that protocol or validate its markers.</p></div></div>
+      <div class="research-cards">
+        <div class="research-card"><span class="research-number">01 / ENGINEERING</span><h3>Validate the phone signal</h3><p>Compare camera-derived pulse rate and waveform quality with a reference device under controlled conditions. Characterize phone model, frame rate, finger pressure, temperature, motion, and skin-tone-related measurement differences.</p><ul><li>Repeated recordings per participant</li><li>Agreement analysis, not correlation alone</li><li>Bland–Altman limits and MAE</li><li>Signal failure and abstention rates</li></ul></div>
+        <div class="research-card"><span class="research-number">02 / PHYSIOLOGY</span><h3>Characterize repeatability</h3><p>Determine whether relative pulse amplitude and beat-to-beat amplitude variability are repeatable across sessions. Do not call a short-spot-check feature “Mvasoc” or equate it with the overnight PPGampCV used in the cited SCD study.</p><ul><li>Within-person repeatability</li><li>Day-to-day variation</li><li>Cold hand / pressure / position effects</li><li>Device-to-device variation</li></ul></div>
+        <div class="research-card"><span class="research-number">03 / CLINICAL</span><h3>Prospective SCD validation</h3><p>Only after engineering validation, collaborate with a hematology service to collect longitudinal reference-grade PPG and accurately timestamped pain outcomes. This requires ethics approval and clinical oversight.</p><ul><li>Pre-register the prediction horizon</li><li>Participant-level validation splits</li><li>Time-dependent sensitivity and calibration</li><li>External validation at another site</li></ul></div>
+      </div>
+      <div class="research-boundary"><strong>What VOCALERT does not do</strong><p>It does not screen for sickle-cell disease, measure blood oxygen, measure blood pressure, diagnose vasoconstriction, predict a VOC, or tell someone to seek or avoid care. The camera-derived pulse estimate is not a replacement for an ECG or medical pulse oximeter.</p></div>
+      <div class="result-actions"><button class="button secondary" id="export-bundle-research">Export research bundle</button><button class="button danger-ghost" id="clear-data-research">Delete all local data</button></div>
+    </section>
+
+    <section id="results-section" class="results-section" hidden>
+      <div class="section-title"><div class="section-number">02</div><div><h2>Signal analysis</h2><p id="result-subtitle">Exploratory signal features from the latest camera recording.</p></div></div>
+      <div class="simulation-banner" id="simulation-banner" hidden>SIMULATED DATA — NOT A REAL PERSON</div>
+      <div class="result-grid">
+        <div class="metric-card"><div class="metric-label">Pulse-rate estimate</div><div class="metric-value"><span id="metric-bpm">—</span><small id="metric-bpm-unit">No reliable estimate</small></div><div class="metric-detail">From detected pulse intervals</div></div>
+        <div class="metric-card" id="quality-metric"><div class="metric-label">Signal quality</div><div class="metric-value"><span id="metric-quality">—</span><small>/ 100</small></div><div class="metric-detail" id="metric-quality-detail">Heuristic quality checks</div></div>
+        <div class="metric-card"><div class="metric-label">Pulse amplitude CV</div><div class="metric-value"><span id="metric-cv">—</span><small>% · exploratory</small></div><div class="metric-detail">Beat-to-beat amplitude variability</div></div>
+        <div class="metric-card"><div class="metric-label">Relative pulse amplitude</div><div class="metric-value"><span id="metric-amplitude">—</span><small>% of mean red level</small></div><div class="metric-detail">Camera/placement-dependent feature</div></div>
+      </div>
+      <div class="analysis-grid">
+        <div class="analysis-card waveform-card"><div class="card-heading"><div><div class="micro-label">TIME SERIES</div><h3>Filtered PPG waveform</h3></div><span class="mini-chip">0.5—4 Hz</span></div><div id="waveform-container" class="waveform-wrap"></div></div>
+        <div class="analysis-card quality-card"><div class="micro-label">AUTOMATED QUALITY REVIEW</div><h3 id="quality-title">Review signal</h3><div class="quality-score"><strong id="quality-score">—</strong><span>/100</span></div><div id="quality-pill" class="quality-pill">unknown</div><ul class="flags-list" id="quality-flags"></ul></div>
+      </div>
+      <div class="baseline-compare" id="baseline-comparison" hidden><div><div class="micro-label">PERSONAL REFERENCE COMPARISON</div><h3>Compared with your saved resting reference</h3><p>This is a descriptive comparison only. It is not a disease or crisis score.</p></div><div class="compare-metrics"><div><span>Pulse-rate difference</span><strong id="compare-bpm">—</strong></div><div><span>Relative-amplitude difference</span><strong id="compare-amplitude">—</strong></div><div><span>Baseline sessions</span><strong id="compare-count">—</strong></div></div></div>
+      <div class="result-actions"><button class="button primary" id="save-summary">Save summary locally</button><button class="button secondary" id="export-csv">Export raw signal CSV</button><button class="button secondary" id="add-baseline">Add to resting reference</button></div>
+      <p class="fine-print result-disclaimer">Pulse-rate estimates and waveform features can be affected by contact pressure, temperature, camera exposure, motion, device model, and perfusion. Pulse-amplitude CV here is an exploratory short-recording feature; it is <strong>not</strong> the same as the overnight research biomarker, and it has no validated VOC risk threshold.</p>
+    </section>
+  </main>
+  <footer class="footer"><span>VOCALERT · RESEARCH PROTOTYPE · v0.1</span><span>LOCAL-FIRST BY DESIGN · NO BACKEND · NO DIAGNOSIS</span></footer>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

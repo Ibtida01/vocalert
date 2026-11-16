@@ -1,0 +1,48 @@
+# Android phone capture guide
+
+## Recommended setup
+
+- Android phone with a rear camera and adjacent LED flash.
+- Latest stable Chrome.
+- VOCALERT hosted at an HTTPS URL.
+- Clean rear camera glass and flash window.
+- Stable place to rest your hand.
+
+## Permissions and torch
+
+1. Open the HTTPS app address in Chrome.
+2. Tap **Enable camera** and allow camera access.
+3. The app requests the environment/rear camera and then attempts to activate the LED torch using the browser's `MediaStreamTrack.applyConstraints` torch capability.
+4. Browser/device support varies. The app reports “torch unconfirmed” if it cannot verify activation. Look at the preview and make sure the fingertip is visibly illuminated before recording.
+5. If the flash will not turn on, try a current Android Chrome version and check that no other app is using the camera. If still unavailable, the device/browser may not expose torch control to a web page. The app does not contain a native Android torch plugin.
+
+## Finger positioning
+
+- Use the soft pad of the index finger, not the nail.
+- Cover both camera lens and adjacent flash.
+- Do not press hard. Too much pressure can reduce local blood volume and change the signal.
+- Avoid repeatedly lifting/replacing the finger during a capture.
+- If the preview is mostly white/red and saturated, loosen contact slightly; if very dark, check flash control and full coverage.
+
+## What a successful capture should look like
+
+A useful recording usually has:
+- consistent frame delivery;
+- a stable average intensity rather than large sudden jumps;
+- a periodic pulse-like variation;
+- multiple clearly detected pulse peaks;
+- no major dark/bright pixel clipping.
+
+The automated quality score is heuristic. A “good” score is not proof that the pulse rate is clinically accurate.
+
+## Android browser troubleshooting
+
+- **Permission denied:** Chrome → site settings → Camera → Allow; reload the page.
+- **Camera unavailable:** close camera/QR/scanner apps and retry; reload; check OS camera permission.
+- **Torch not confirmed:** torch API is not supported or not exposed on this device/browser. Try a different supported Android device; do not assume the flash is on.
+- **Black preview:** ensure camera permission is granted and the correct rear camera is selected. Stop camera and retry.
+- **Poor signal:** warm hands comfortably, reduce movement, support the hand, lighten pressure, clean lens/flash, and repeat.
+- **Sampling rate low:** close other heavy apps, keep the phone cool, and try a different browser/device.
+- **Camera blocked on HTTP:** use HTTPS. A plain LAN address such as `http://192.168.0.10:5173` is commonly not treated as a secure context.
+
+The app works as a browser PWA; it is not a native Android APK.
