@@ -41,8 +41,8 @@ M3PD paper: https://pmc.ncbi.nlm.nih.gov/articles/PMC11844976/ (see paper/data l
 ## 4. What the app's displayed features mean
 
 - **Filtered waveform:** the red-channel mean trace after basic band-pass filtering (0.5–4 Hz). It is not a clinically standardized waveform.
-- **Pulse-rate estimate:** calculated from detected peaks. It is not ECG and can be wrong when the signal is noisy or irregular.
-- **Inter-beat intervals:** time between detected PPG peaks. These are pulse-to-pulse intervals, not ECG R–R intervals.
+- **Pulse-rate estimate:** estimated from downward-going red-channel trough intervals and cross-checked with autocorrelation. It is not ECG and can be wrong when the signal is noisy or irregular.
+- **Inter-beat intervals:** time between detected PPG troughs. These are pulse-to-pulse intervals, not ECG R–R intervals.
 - **Relative pulse amplitude:** a short-clip AC-like pulse amplitude divided by mean red-channel intensity. It is highly dependent on device optics, exposure, flash output, finger pressure, temperature, and contact.
 - **Pulse-amplitude CV:** coefficient of variation of amplitudes estimated between adjacent detected peaks/troughs in this 30-second clip. It is an exploratory feature. It must not be labelled as the study's overnight PPGampCV or treated as a validated vasoconstriction biomarker.
 - **Quality score:** a software heuristic to flag obviously weak recordings. It has not been validated against clinician judgement, ECG, or reference PPG.

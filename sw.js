@@ -2,7 +2,7 @@ const BASE = new URL('./', self.location.href);
 const SHELL = ['', 'index.html', 'manifest.webmanifest', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'styles.css', 'app.js', 'signal.js']
   .map((path) => new URL(path || './', BASE).href);
 const INDEX_URL = new URL('index.html', BASE).href;
-const CACHE = 'vocalert-shell-v1';
+const CACHE = 'vocalert-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));

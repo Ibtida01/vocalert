@@ -25,7 +25,7 @@ Start with a small convenience/engineering pilot only after required approval. A
 - Rest seated for 5 minutes before each resting recording.
 - Keep the hand supported and comfortably warm.
 - Use the fingertip pad to cover camera + flash with light pressure.
-- Capture 30–60 seconds per recording (VOCALERT v0.1 uses 30 seconds after 5 seconds warm-up).
+- Capture 30–60 seconds per recording (VOCALERT v0.2 uses a 30-second measurement after 5 seconds warm-up).
 - Repeat at least 3 recordings per participant with a short rest between recordings.
 - Record smartphone model, Android version, browser version, camera resolution, observed frame rate, time, hand/finger, posture, ambient conditions, recent activity, and whether the flash was confirmed on.
 - Avoid collecting names, phone numbers, national IDs, or direct identifiers in the signal file.

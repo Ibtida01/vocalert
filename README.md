@@ -1,6 +1,6 @@
 # VOCALERT — smartphone fingertip PPG research prototype
 
-**Version:** 0.1.0  
+**Version:** 0.2.0  
 **Runs with:** HTML + CSS + JavaScript; no build step, framework, npm package, backend, or external font dependency.  
 **Purpose:** capture a short fingertip photoplethysmography (PPG) signal using a smartphone rear camera + flash, inspect signal quality, calculate exploratory pulse features, compare a recording with a locally stored personal resting reference, and export data for research.
 
@@ -10,16 +10,28 @@
 
 - Rear-camera access through the browser's `getUserMedia` API.
 - Best-effort flashlight/torch activation through browser video-track constraints (device and browser support vary).
-- Center-region RGB sampling from each decoded camera frame; samples remain in memory during a capture.
+- Center-region RGB sampling from presented camera frames using `requestVideoFrameCallback` where available; each row includes media-time and presented-frame metadata. A media-time-aware `requestAnimationFrame` fallback is used only when the browser lacks the video-frame callback API.
 - Five-second warm-up followed by a 30-second measurement window.
-- Uniform resampling, 0.5–4 Hz biquad filtering, pulse-peak detection, pulse-rate estimate, inter-beat intervals, relative pulse amplitude, and exploratory beat-to-beat pulse-amplitude coefficient of variation.
-- Heuristic recording-quality flags (duration, frame rate, pixel clipping, frame-timing jitter, and pulse-peak consistency). These thresholds are **not clinically validated**.
+- Uniform resampling to a 30 Hz analysis grid, 0.5–4 Hz filtering, downward red-channel trough detection, autocorrelation cross-check, pulse-rate estimate, inter-beat intervals, relative pulse amplitude, and exploratory beat-to-beat pulse-amplitude coefficient of variation.
+- Heuristic recording-quality flags (duration, captured-sample rate, frame-timing variability, pixel clipping, and agreement between trough timing and autocorrelation). These thresholds are **not clinically validated**. Identical RGB averages are not used as proof of duplicate frames.
 - Synthetic waveform mode for demonstrating the interface on a desktop without a camera.
 - Optional local-only resting-reference entries and measurement summaries in browser `localStorage`.
 - CSV export of current RGB samples and filtered signal; JSON export of locally saved summaries.
 - Responsive installable PWA shell. Camera use still requires a secure browser context (HTTPS or localhost).
 
-## 2. What is intentionally not implemented
+## 2. What changed in v0.2
+
+- Uses `HTMLVideoElement.requestVideoFrameCallback()` where available, recording `mediaTime` and `presentedFrames` metadata.
+- Uses a media-time-aware fallback only when that API is unavailable.
+- Separates effective captured samples/second from median-interval rate and the 30 Hz analysis grid.
+- Uses downward-going red-channel troughs for transmission-mode pulse candidates and cross-checks the interval estimate with autocorrelation.
+- Adds a caution band for warning-bearing recordings; a 75/100 recording is no longer labelled “good”.
+- Exports both video media time and callback timestamp so frame timing can be audited.
+- Uses v2 local-storage keys so v0.1 summaries are not silently mixed into new baselines.
+
+The first three user-supplied recordings from a Redmi Note 11 Pro+ 5G were re-analysed during this revision. The original v0.1 estimates (75, 75, 94.7 BPM) differed from the v0.2 exploratory outputs (approximately 72, 67, 68 BPM). These are not reference-validated heart rates. The old exports did not include browser media-time/presented-frame metadata, so their actual camera frame cadence cannot be established retrospectively. See `docs/REDMI_NOTE11_PRO_PLUS_FIRST_REVIEW.md`.
+
+## 3. What is intentionally not implemented
 
 - No sickle-cell classifier.
 - No VOC warning or crisis-risk score.
@@ -28,7 +40,7 @@
 - No cloud API, login, analytics, server database, or automatic upload.
 - No claim that a 30-second phone recording reproduces overnight wristband/finger-sensor biomarkers from the 2026 SCD feasibility study.
 
-## 3. Run locally on Windows 11
+## 4. Run locally on Windows 11
 
 No Node.js or npm installation is needed.
 
@@ -48,7 +60,7 @@ No Node.js or npm installation is needed.
 
 Stop the local server with `Ctrl+C`.
 
-## 4. Use it on your Android smartphone
+## 5. Use it on your Android smartphone
 
 The browser needs camera access in a secure context. A plain HTTP LAN address (e.g. `http://192.168.x.x:8000`) may not permit camera access.
 
@@ -72,7 +84,7 @@ To install the app-like PWA, open the HTTPS site in Chrome and select **⋮ → 
 
 Netlify Drop, Cloudflare Pages, or Vercel can also host this as a static site. Choose the project directory as the publish/output directory and use **no build command**. The project has no npm dependencies.
 
-## 5. Fingertip placement protocol
+## 6. Fingertip placement protocol
 
 1. Sit down and rest quietly for about five minutes before a resting measurement.
 2. Ensure the phone camera lens and adjacent flash are clean.
@@ -85,16 +97,16 @@ Netlify Drop, Cloudflare Pages, or Vercel can also host this as a static site. C
 
 **Never use VOCALERT during a suspected acute medical event to decide whether to seek care.** If someone with sickle-cell disease develops pain or other symptoms covered by their clinical care plan, follow that plan and contact their treating team. Do not wait for this app.
 
-## 6. How to interpret the screen
+## 7. How to interpret the screen
 
-- **Pulse-rate estimate:** calculated from detected peak-to-peak intervals. It is not ECG and can be wrong when the signal is noisy or irregular.
+- **Pulse-rate estimate:** downward-going red-channel trough intervals cross-checked against autocorrelation. This is an exploratory camera-derived pulse estimate, not ECG; if the two methods disagree, the app should withhold or flag the estimate.
 - **Signal quality:** heuristic software checks. “Good” means only that the recording passed these checks; it does not mean medically accurate.
 - **Relative pulse amplitude:** filtered pulse amplitude divided by mean red-channel intensity. This is sensitive to device optics, exposure, flash output, finger pressure, temperature, fit, and contact.
 - **Pulse amplitude CV:** coefficient of variation of amplitudes estimated between adjacent detected peaks/troughs in this 30-second clip. It is experimental. It is **not interchangeable** with the overnight PPG amplitude CV used in the cited sickle-cell study.
 - **Baseline comparison:** descriptive differences from readings explicitly saved on this device. It is not a risk score or a normal range. Build a personal reference using repeated, comparable resting sessions on different days.
 - **Simulation:** synthetic data generated in JavaScript. It is for testing the UI and analysis path only. It is never a participant recording and must never enter a study dataset.
 
-## 7. Privacy and data handling
+## 8. Privacy and data handling
 
 - Camera frames are processed in the browser and are not recorded as video or sent to a server.
 - Raw per-frame RGB samples remain in memory until the page is refreshed or another capture begins, unless you explicitly export a CSV.
@@ -103,18 +115,19 @@ Netlify Drop, Cloudflare Pages, or Vercel can also host this as a static site. C
 - Do not enter names, national IDs, phone numbers, patient identifiers, or other identifying information into the app. Research exports should use study-specific pseudonymous IDs managed separately under an approved protocol.
 - Clearing browser data or using a different browser/device may remove or separate local records. Export data you intend to keep.
 
-## 8. Project structure
+## 9. Project structure
 
 ```text
 vocalert/
 ├── app.js                    # browser UI, camera capture, local storage, exports
-├── signal.js                 # PPG resampling, filtering, peak detection, features
+├── signal.js                 # PPG resampling, filtering, trough detection, autocorrelation, features
 ├── styles.css                # responsive interface
 ├── index.html                # static app shell
 ├── manifest.webmanifest      # PWA metadata
 ├── sw.js                     # basic offline shell cache
 ├── favicon.svg, icon-192.png, icon-512.png
 ├── .nojekyll                 # GitHub Pages compatibility
+├── CHANGELOG.md              # release notes
 ├── package.json              # only declares native ES-module mode; no dependencies
 ├── docs/
 │   ├── SCIENTIFIC_BACKGROUND.md
@@ -131,16 +144,16 @@ vocalert/
     └── requirements.txt
 ```
 
-## 9. Engineering limitations to test on your phone
+## 10. Engineering limitations to test on your phone
 
 - Torch control via `MediaStreamTrack.applyConstraints({ advanced: [{ torch: true }] })` is not universally supported. The app reports if it cannot confirm torch activation.
-- Some browsers expose a preview but do not provide a stable camera frame cadence. Check sampling rate and quality flags.
+- Some browsers expose a preview but do not provide a stable camera frame cadence. Check `frame_capture_mode`, `video_media_time_seconds`, `presented_frames`, effective captured samples/second, and quality flags in the export. A repeated RGB region mean is not proof that the exact same camera frame was read twice.
 - Camera auto-exposure, white balance, compression, rolling shutter, sensor size, flash characteristics, skin temperature, and finger pressure can change the extracted signal.
-- The initial region of interest is a centered crop. Some phone camera layouts may need tuning.
-- The heuristic peak detector is intentionally simple and needs comparison against a reference signal before any research use.
+- The initial region of interest is a centered crop. Some phone camera layouts may need tuning. `requestVideoFrameCallback` timing is browser-dependent; check the exported media-time sequence on each target device.
+- The v0.2 trough detector and autocorrelation cross-check are still exploratory and need comparison against a synchronized reference signal before any research use.
 - A single app capture is not a validated physiological measurement.
 
-## 10. Research and scientific limitations
+## 11. Research and scientific limitations
 
 Read these before presenting results:
 

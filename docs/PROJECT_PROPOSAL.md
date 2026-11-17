@@ -48,7 +48,7 @@ It reduces the need for a dedicated sensor during spot-check engineering experim
 - 5-second warm-up, 30-second recording.
 - RGB average extraction from a fixed central ROI.
 - Red-channel detrending and 0.5–4 Hz filtering.
-- Basic peak detection and pulse-rate estimate.
+- Downward red-channel trough detection, autocorrelation cross-check, and exploratory pulse-rate estimate.
 - Exploratory pulse-amplitude features.
 - Heuristic signal quality flags and abstention-like “repeat recording” guidance.
 - Local-only summaries and personal reference; CSV/JSON export.

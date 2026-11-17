@@ -3,14 +3,16 @@ import { analyzePpg, makeSyntheticPpg } from './signal.js';
 const WARMUP_SECONDS = 5;
 const RECORD_SECONDS = 30;
 const TOTAL_SECONDS = WARMUP_SECONDS + RECORD_SECONDS;
-const BASELINE_KEY = 'vocalert.baselines.v1';
-const HISTORY_KEY = 'vocalert.history.v1';
+const BASELINE_KEY = 'vocalert.baselines.v2';
+const HISTORY_KEY = 'vocalert.history.v2';
 
 const $ = (id) => document.getElementById(id);
 const state = {
   tab: 'overview', camera: 'off', torch: false, stream: null, stage: 'idle',
-  raf: null, lastVideoTime: -1, startedAt: 0, samples: [], latestSamples: [], latest: null,
-  latestSource: null, baselines: loadJson(BASELINE_KEY, []), history: loadJson(HISTORY_KEY, []),
+  raf: null, frameRaf: null, videoFrameCallbackId: null, lastVideoTime: -1, lastMediaTime: null,
+  startedAt: 0, measurementStartedAt: 0, firstMeasurementMediaTime: null, samples: [], latestSamples: [], latest: null,
+  latestSource: null, latestCaptureInfo: null, captureInfo: null, frameCaptureMode: 'unknown',
+  baselines: loadJson(BASELINE_KEY, []), history: loadJson(HISTORY_KEY, []),
   canvasContext: null, lastUi: 0,
 };
 
@@ -104,6 +106,14 @@ async function enableCamera() {
     video.playsInline = true;
     await video.play();
     const track = stream.getVideoTracks()[0];
+    let trackSettings = {};
+    try { trackSettings = track.getSettings ? track.getSettings() : {}; } catch { trackSettings = {}; }
+    state.captureInfo = {
+      capturedAt: new Date().toISOString(),
+      videoTrackSettings: trackSettings,
+      requestVideoFrameCallbackSupported: typeof video.requestVideoFrameCallback === 'function',
+      userAgent: navigator.userAgent,
+    };
     state.torch = false;
     try {
       const capabilities = track.getCapabilities ? track.getCapabilities() : {};
@@ -112,6 +122,12 @@ async function enableCamera() {
         state.torch = true;
       }
     } catch { state.torch = false; }
+    try {
+      state.captureInfo.torchConfirmed = state.torch;
+      state.captureInfo.videoTrackSettingsAfterTorch = track.getSettings ? track.getSettings() : trackSettings;
+    } catch {
+      state.captureInfo.torchConfirmed = state.torch;
+    }
     $('camera-placeholder').hidden = true;
     video.classList.add('visible');
     $('camera-instruction').hidden = false;
@@ -165,7 +181,14 @@ function setCameraError(message) {
 }
 function stopCamera(fromError = false) {
   if (state.raf != null) cancelAnimationFrame(state.raf);
+  if (state.frameRaf != null) cancelAnimationFrame(state.frameRaf);
   state.raf = null;
+  state.frameRaf = null;
+  const activeVideo = $('camera-video');
+  if (state.videoFrameCallbackId != null && typeof activeVideo.cancelVideoFrameCallback === 'function') {
+    try { activeVideo.cancelVideoFrameCallback(state.videoFrameCallbackId); } catch { /* callback may already have fired */ }
+  }
+  state.videoFrameCallbackId = null;
   if (state.stream) state.stream.getTracks().forEach((track) => track.stop());
   state.stream = null;
   const video = $('camera-video');
@@ -224,56 +247,132 @@ function readFrame(video) {
   };
 }
 
+function recordPresentedFrame(video, timestamp, mediaTime, presentedFrames, captureMode) {
+  const measurementStart = state.startedAt + WARMUP_SECONDS * 1000;
+  const measurementEnd = measurementStart + RECORD_SECONDS * 1000;
+  if (timestamp < measurementStart || timestamp > measurementEnd) return;
+  if (state.stage === 'warming') {
+    state.stage = 'recording';
+    $('capture-title').textContent = 'Capturing pulse waveform';
+  }
+  if (Number.isFinite(mediaTime)) {
+    if (state.lastMediaTime != null && mediaTime <= state.lastMediaTime + 1e-6) return;
+    state.lastMediaTime = mediaTime;
+    if (state.firstMeasurementMediaTime == null) state.firstMeasurementMediaTime = mediaTime;
+  }
+  const sample = readFrame(video);
+  if (!sample) return;
+  // Prefer the browser's per-frame media timestamp for analysis timing. Keep the
+  // callback timestamp as a second clock so timing behaviour can be audited.
+  sample.t = Number.isFinite(mediaTime)
+    ? (mediaTime - state.firstMeasurementMediaTime) * 1000
+    : timestamp - measurementStart;
+  sample.callbackTimestampMs = timestamp;
+  sample.mediaTimeSec = Number.isFinite(mediaTime) ? mediaTime : null;
+  sample.presentedFrames = Number.isFinite(presentedFrames) ? presentedFrames : null;
+  sample.captureMode = captureMode;
+  state.samples.push(sample);
+}
+
+function startVideoFrameCapture(video) {
+  if (typeof video.requestVideoFrameCallback === 'function') {
+    state.frameCaptureMode = 'requestVideoFrameCallback';
+    const onFrame = (timestamp, metadata) => {
+      if (state.stage !== 'warming' && state.stage !== 'recording') return;
+      recordPresentedFrame(
+        video,
+        timestamp,
+        metadata?.mediaTime,
+        metadata?.presentedFrames,
+        'requestVideoFrameCallback',
+      );
+      if (state.stage === 'warming' || state.stage === 'recording') {
+        state.videoFrameCallbackId = video.requestVideoFrameCallback(onFrame);
+      }
+    };
+    state.videoFrameCallbackId = video.requestVideoFrameCallback(onFrame);
+    return;
+  }
+
+  // Fallback for browsers without requestVideoFrameCallback. Only sample when
+  // the media time advances; requestAnimationFrame itself is not a frame clock.
+  state.frameCaptureMode = 'requestAnimationFrame_mediaTime_fallback';
+  const fallbackLoop = (timestamp) => {
+    if (state.stage !== 'warming' && state.stage !== 'recording') return;
+    const mediaTime = video.currentTime;
+    if (video.readyState >= 2 && Number.isFinite(mediaTime)
+      && (state.lastMediaTime == null || mediaTime > state.lastMediaTime + 1e-6)) {
+      recordPresentedFrame(video, timestamp, mediaTime, null, 'requestAnimationFrame_mediaTime_fallback');
+      state.lastMediaTime = mediaTime;
+    }
+    state.frameRaf = requestAnimationFrame(fallbackLoop);
+  };
+  state.frameRaf = requestAnimationFrame(fallbackLoop);
+}
+
 function startCapture() {
   if (!state.stream || state.camera !== 'ready' || state.stage === 'warming' || state.stage === 'recording') return;
-  state.samples = []; state.latest = null; state.latestSource = null;
-  state.startedAt = performance.now(); state.lastVideoTime = -1; state.stage = 'warming'; state.lastUi = 0;
+  state.samples = [];
+  state.latest = null;
+  state.latestSource = null;
+  state.latestCaptureInfo = null;
+  state.startedAt = performance.now();
+  state.measurementStartedAt = state.startedAt + WARMUP_SECONDS * 1000;
+  state.firstMeasurementMediaTime = null;
+  state.lastVideoTime = -1;
+  state.lastMediaTime = null;
+  state.stage = 'warming';
+  state.lastUi = 0;
   $('results-section').hidden = true;
   $('capture-title').textContent = 'Settle the signal';
   $('start-capture').disabled = true;
   $('simulate').disabled = true;
-  $('progress-fill').style.width = '0%'; $('progress-caption').textContent = `Warm-up · 0.0 / ${WARMUP_SECONDS}s`;
+  $('progress-fill').style.width = '0%';
+  $('progress-caption').textContent = `Warm-up · 0.0 / ${WARMUP_SECONDS}s`;
   $('frame-count').textContent = '0 frames';
-  setNotice('Keep still and use light, steady contact. Do not press hard enough to restrict blood flow.');
-  const loop = () => {
-    const video = $('camera-video');
-    const elapsedSec = (performance.now() - state.startedAt) / 1000;
-    const inRecording = elapsedSec >= WARMUP_SECONDS;
-    if (inRecording && state.stage !== 'recording') {
+  setNotice('Keep still and use light, steady contact. The app now samples presented camera frames and records their media timestamps where the browser supports it.');
+
+  const video = $('camera-video');
+  startVideoFrameCapture(video);
+
+  const updateProgress = () => {
+    const now = performance.now();
+    const elapsedSec = (now - state.startedAt) / 1000;
+    const measurementElapsed = Math.max(0, elapsedSec - WARMUP_SECONDS);
+    if (elapsedSec >= WARMUP_SECONDS && state.stage === 'warming') {
       state.stage = 'recording';
       $('capture-title').textContent = 'Capturing pulse waveform';
     }
-    if (inRecording && video.currentTime !== state.lastVideoTime) {
-      const sample = readFrame(video);
-      if (sample) {
-        sample.t = performance.now() - (state.startedAt + WARMUP_SECONDS * 1000);
-        state.samples.push(sample);
-        state.lastVideoTime = video.currentTime;
-      }
-    }
-    const measurementElapsed = Math.max(0, elapsedSec - WARMUP_SECONDS);
-    if (performance.now() - state.lastUi > 140) {
+    if (now - state.lastUi > 140) {
       $('progress-fill').style.width = `${Math.min(100, (elapsedSec / TOTAL_SECONDS) * 100)}%`;
-      $('progress-caption').textContent = inRecording
-        ? `Recording · ${Math.min(RECORD_SECONDS, measurementElapsed).toFixed(1)} / ${RECORD_SECONDS}s`
-        : `Warm-up · ${Math.min(WARMUP_SECONDS, elapsedSec).toFixed(1)} / ${WARMUP_SECONDS}s`;
-      $('frame-count').textContent = `${state.samples.length} frames`;
-      state.lastUi = performance.now();
+      $('progress-caption').textContent = elapsedSec < WARMUP_SECONDS
+        ? `Warm-up · ${Math.min(WARMUP_SECONDS, elapsedSec).toFixed(1)} / ${WARMUP_SECONDS}s`
+        : `Recording · ${Math.min(RECORD_SECONDS, measurementElapsed).toFixed(1)} / ${RECORD_SECONDS}s`;
+      $('frame-count').textContent = `${state.samples.length} unique video frames`;
+      state.lastUi = now;
     }
     if (measurementElapsed >= RECORD_SECONDS) {
       state.raf = null;
       finishCapture('camera', state.samples);
       return;
     }
-    state.raf = requestAnimationFrame(loop);
+    state.raf = requestAnimationFrame(updateProgress);
   };
-  state.raf = requestAnimationFrame(loop);
+  state.raf = requestAnimationFrame(updateProgress);
 }
 
 function finishCapture(source, samples) {
   state.stage = 'done';
+  const video = $('camera-video');
+  if (state.videoFrameCallbackId != null && typeof video.cancelVideoFrameCallback === 'function') {
+    try { video.cancelVideoFrameCallback(state.videoFrameCallbackId); } catch { /* callback may already have fired */ }
+  }
+  state.videoFrameCallbackId = null;
+  if (state.frameRaf != null) cancelAnimationFrame(state.frameRaf);
+  state.frameRaf = null;
   state.latestSamples = [...samples];
   state.latestSource = source;
+  state.latestCaptureInfo = source === 'camera' ? { ...state.captureInfo, frameCaptureMode: state.frameCaptureMode } : { frameCaptureMode: 'synthetic' };
   state.latest = analyzePpg(samples);
   $('capture-title').textContent = 'Recording complete';
   $('progress-fill').style.width = '100%';
@@ -303,12 +402,15 @@ function renderResults() {
   $('results-section').hidden = false;
   $('result-subtitle').textContent = state.latestSource === 'simulation'
     ? 'Synthetic demonstration signal — never treat this as a human measurement.'
-    : 'Exploratory signal features from the latest camera recording.';
+    : 'Exploratory signal features from the latest camera recording. Rate is estimated from downward red-channel pulses and cross-checked against autocorrelation.';
   $('simulation-banner').hidden = state.latestSource !== 'simulation';
   $('metric-bpm').textContent = m.bpm == null ? '—' : `${Math.round(m.bpm)}`;
   $('metric-bpm-unit').textContent = m.bpm == null ? 'No reliable estimate' : 'beats / min';
   $('metric-quality').textContent = `${m.qualityScore}`;
-  $('metric-quality-detail').textContent = m.quality === 'good' ? 'No major heuristic warning' : m.quality === 'poor' ? 'Repeat the recording' : 'Use caution; inspect warnings';
+  const captureMode = state.latestCaptureInfo?.frameCaptureMode === 'requestVideoFrameCallback'
+    ? 'video-frame clock'
+    : state.latestCaptureInfo?.frameCaptureMode === 'requestAnimationFrame_mediaTime_fallback' ? 'media-time fallback' : 'synthetic';
+  $('metric-quality-detail').textContent = `${m.effectiveSamplingRateHz.toFixed(1)} samples/s · ${m.frameIntervalCvPct == null ? 'timing n/a' : `timing CV ${m.frameIntervalCvPct.toFixed(0)}%`} · ${captureMode}`;
   $('quality-metric').className = `metric-card ${m.quality === 'good' ? 'metric-good' : m.quality === 'poor' ? 'metric-bad' : 'metric-warn'}`;
   $('metric-cv').textContent = format(m.pulseAmplitudeCvPct);
   $('metric-amplitude').textContent = format(m.relativePulseAmplitudePct, 3);
@@ -334,7 +436,7 @@ function drawWaveform(values) {
     const y = height - pad - ((value - min) / span) * (height - 2 * pad);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  $('waveform-container').innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Filtered fingertip PPG waveform" class="waveform-svg"><line x1="16" x2="884" y1="57.5" y2="57.5" class="chart-grid"/><line x1="16" x2="884" y1="115" y2="115" class="chart-grid"/><line x1="16" x2="884" y1="172.5" y2="172.5" class="chart-grid"/><polyline points="${polyline}" class="waveform-line" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="chart-caption"><span>Filtered pulse waveform (0.5–4 Hz)</span><span>${state.latest.samplingRateHz.toFixed(1)} Hz resampled</span></div>`;
+  $('waveform-container').innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Filtered fingertip PPG waveform" class="waveform-svg"><line x1="16" x2="884" y1="57.5" y2="57.5" class="chart-grid"/><line x1="16" x2="884" y1="115" y2="115" class="chart-grid"/><line x1="16" x2="884" y1="172.5" y2="172.5" class="chart-grid"/><polyline points="${polyline}" class="waveform-line" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="chart-caption"><span>Filtered pulse waveform (0.5–4 Hz)</span><span>${state.latest.analysisSamplingRateHz.toFixed(1)} Hz analysis grid</span></div>`;
 }
 
 function getBaselineAverage() {
@@ -364,7 +466,10 @@ function saveCurrentSummary() {
     metrics: {
       bpm: m.bpm, meanIbiMs: m.meanIbiMs, ibiCount: m.ibiMs.length,
       pulseAmplitudeCvPct: m.pulseAmplitudeCvPct, relativePulseAmplitudePct: m.relativePulseAmplitudePct,
-      samplingRateHz: m.samplingRateHz, durationSec: m.durationSec, sampleCount: m.sampleCount,
+      samplingRateHz: m.samplingRateHz, medianIntervalRateHz: m.medianIntervalRateHz,
+      effectiveSamplingRateHz: m.effectiveSamplingRateHz, frameIntervalCvPct: m.frameIntervalCvPct,
+      durationSec: m.durationSec, sampleCount: m.sampleCount, peakCount: m.peakCount,
+      bpmFromTroughs: m.bpmFromTroughs, bpmFromAutocorrelation: m.bpmFromAutocorrelation,
       qualityScore: m.qualityScore, quality: m.quality, flags: m.flags,
     },
   };
@@ -387,31 +492,50 @@ function addBaseline() {
 function exportCurrentCsv() {
   const m = state.latest; const samples = state.latestSamples;
   if (!m || !samples.length) return;
-  const rows = ['time_seconds,red_channel_mean,green_channel_mean,blue_channel_mean,clipped_fraction,spatial_luminance_std,filtered_red_channel'];
+  const rows = ['time_seconds,video_media_time_seconds,callback_timestamp_ms,presented_frames,capture_mode,red_channel_mean,green_channel_mean,blue_channel_mean,clipped_fraction,spatial_luminance_std,filtered_red_channel'];
   samples.forEach((sample, i) => {
     const time = sample.t / 1000;
-    const filteredIndex = Math.min(m.filtered.length - 1, Math.max(0, Math.round(time * m.samplingRateHz)));
-    rows.push([time, sample.r, sample.g, sample.b, sample.clippedFraction, sample.spatialStd, m.filtered[filteredIndex] ?? ''].join(','));
+    const filteredIndex = Math.min(m.filtered.length - 1, Math.max(0, Math.round(time * m.analysisSamplingRateHz)));
+    rows.push([time, sample.mediaTimeSec ?? '', sample.callbackTimestampMs ?? '', sample.presentedFrames ?? '', sample.captureMode ?? '', sample.r, sample.g, sample.b, sample.clippedFraction, sample.spatialStd, m.filtered[filteredIndex] ?? ''].join(','));
   });
   const metadata = [
-    `# source=${state.latestSource}`, `# bpm_estimate=${m.bpm ?? ''}`, `# quality=${m.quality}`,
-    `# quality_score=${m.qualityScore}`, `# duration_seconds=${m.durationSec.toFixed(2)}`,
-    `# sampling_rate_hz=${m.samplingRateHz.toFixed(2)}`,
+    '# app_version=0.2.0',
+    `# source=${state.latestSource}`, `# bpm_estimate=${m.bpm ?? ''}`,
+    `# bpm_from_troughs=${m.bpmFromTroughs ?? ''}`, `# bpm_from_autocorrelation=${m.bpmFromAutocorrelation ?? ''}`,
+    `# quality=${m.quality}`, `# quality_score=${m.qualityScore}`,
+    `# duration_seconds=${m.durationSec.toFixed(2)}`,
+    `# effective_sampling_rate_hz=${m.effectiveSamplingRateHz.toFixed(2)}`,
+    `# median_interval_rate_hz=${m.medianIntervalRateHz.toFixed(2)}`,
+    `# frame_interval_cv_pct=${m.frameIntervalCvPct == null ? '' : m.frameIntervalCvPct.toFixed(2)}`,
+    `# presented_frame_drop_fraction=${m.presentedFrameDropFraction == null ? '' : m.presentedFrameDropFraction.toFixed(4)}`,
+    `# analysis_sampling_rate_hz=${m.analysisSamplingRateHz.toFixed(2)}`,
+    `# pulse_polarity=${m.pulsePolarity}`,
+    `# frame_capture_mode=${state.latestCaptureInfo?.frameCaptureMode ?? 'unknown'}`,
+    `# torch_confirmed=${state.latestCaptureInfo?.torchConfirmed ?? ''}`,
+    `# video_track_settings=${JSON.stringify(state.latestCaptureInfo?.videoTrackSettings ?? {})}`,
+    `# video_track_settings_after_torch=${JSON.stringify(state.latestCaptureInfo?.videoTrackSettingsAfterTorch ?? {})}`,
+    `# user_agent=${navigator.userAgent}`,
     '# NOTE: research prototype only; not a diagnostic or VOC prediction.',
   ].join('\n');
   downloadText(`vocalert-ppg-${new Date().toISOString().replaceAll(':', '-')}.csv`, `${metadata}\n${rows.join('\n')}`, 'text/csv');
 }
 function exportResearchBundle() {
   const bundle = {
-    schema: 'vocalert-research-export-v1', exportedAt: new Date().toISOString(),
+    schema: 'vocalert-research-export-v2', exportedAt: new Date().toISOString(),
     appPurpose: 'Smartphone fingertip PPG signal acquisition and exploratory analysis; not diagnosis or VOC prediction.',
     latestSource: state.latestSource,
+    latestCaptureInfo: state.latestCaptureInfo,
     latestMetrics: state.latest ? {
       bpm: state.latest.bpm, meanIbiMs: state.latest.meanIbiMs, ibiMs: state.latest.ibiMs,
       pulseAmplitudeCvPct: state.latest.pulseAmplitudeCvPct,
       relativePulseAmplitudePct: state.latest.relativePulseAmplitudePct,
-      samplingRateHz: state.latest.samplingRateHz, durationSec: state.latest.durationSec,
-      sampleCount: state.latest.sampleCount, qualityScore: state.latest.qualityScore,
+      samplingRateHz: state.latest.samplingRateHz, medianIntervalRateHz: state.latest.medianIntervalRateHz,
+      effectiveSamplingRateHz: state.latest.effectiveSamplingRateHz, frameIntervalCvPct: state.latest.frameIntervalCvPct,
+      presentedFrameDropFraction: state.latest.presentedFrameDropFraction,
+      analysisSamplingRateHz: state.latest.analysisSamplingRateHz, durationSec: state.latest.durationSec,
+      bpmFromTroughs: state.latest.bpmFromTroughs, bpmFromAutocorrelation: state.latest.bpmFromAutocorrelation,
+      bpmDisagreement: state.latest.bpmDisagreement, pulsePolarity: state.latest.pulsePolarity,
+      sampleCount: state.latest.sampleCount, peakCount: state.latest.peakCount, qualityScore: state.latest.qualityScore,
       quality: state.latest.quality, flags: state.latest.flags,
     } : null,
     baselineSummaries: state.baselines, savedMeasurementSummaries: state.history,
